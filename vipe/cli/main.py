@@ -20,6 +20,7 @@ import hydra
 
 from vipe import get_config_path, make_pipeline
 from vipe.streams.base import ProcessedVideoStream
+from vipe.streams.raw_img_stream import RawImgStream
 from vipe.streams.raw_mp4_stream import RawMp4Stream
 from vipe.utils.logging import configure_logging
 from vipe.utils.viser import run_viser
@@ -55,7 +56,18 @@ def infer(video: Path, output: Path, pipeline: str, visualize: bool):
     vipe_pipeline = make_pipeline(args.pipeline)
 
     # Some input videos can be malformed, so we need to cache the videos to obtain correct number of frames.
-    video_stream = ProcessedVideoStream(RawMp4Stream(video), []).cache(desc="Reading video stream")
+    print(f"video path: {video}")
+
+    # check if ends with .mp4
+    if video.suffix.lower() == ".mp4":
+        raw_stream = RawMp4Stream(video)
+    # else check if it is a directory
+    elif video.is_dir():
+        raw_stream = RawImgStream(video)
+    else:
+        raise ValueError(f"No supported video format found for {video}")
+
+    video_stream = ProcessedVideoStream(raw_stream, []).cache(desc="Reading video stream")
 
     vipe_pipeline.run(video_stream)
     logger.info("Finished")
