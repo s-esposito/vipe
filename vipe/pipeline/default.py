@@ -16,29 +16,22 @@
 
 import logging
 import pickle
-
 from pathlib import Path
 
 import torch
-
 from omegaconf import DictConfig
 
 from vipe.slam.system import SLAMOutput, SLAMSystem
-from vipe.streams.base import (
-    AssignAttributesProcessor,
-    FrameAttribute,
-    MultiviewVideoList,
-    ProcessedVideoStream,
-    StreamProcessor,
-    VideoStream,
-)
+from vipe.streams.base import (AssignAttributesProcessor, FrameAttribute,
+                               MultiviewVideoList, ProcessedVideoStream,
+                               StreamProcessor, VideoStream)
 from vipe.utils import io
 from vipe.utils.cameras import CameraType
 from vipe.utils.visualization import save_projection_video
 
 from . import AnnotationPipelineOutput, Pipeline
-from .processors import AdaptiveDepthProcessor, GeoCalibIntrinsicsProcessor, TrackAnythingProcessor
-
+from .processors import (AdaptiveDepthProcessor, GeoCalibIntrinsicsProcessor,
+                         TrackAnythingProcessor)
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +107,10 @@ class DefaultAnnotationPipeline(Pipeline):
 
         slam_pipeline = SLAMSystem(device=torch.device("cuda"), config=self.slam_cfg)
         slam_output = slam_pipeline.run(slam_streams, rig=slam_rig, camera_type=self.camera_type)
+        
+        # TODO: 
+        # print(slam_output)
+        # exit(0)
 
         if self.return_payload:
             annotate_output.payload = slam_output

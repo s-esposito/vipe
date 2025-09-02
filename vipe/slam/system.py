@@ -24,7 +24,8 @@ from omegaconf import DictConfig, OmegaConf
 from vipe.ext.lietorch import SE3
 from vipe.priors.depth import make_depth_model
 from vipe.priors.depth.base import DepthType
-from vipe.streams.base import FrameAttribute, ProcessedVideoStream, StreamProcessor, VideoFrame, VideoStream
+from vipe.streams.base import (FrameAttribute, ProcessedVideoStream,
+                               StreamProcessor, VideoFrame, VideoStream)
 from vipe.utils.cameras import CameraType
 from vipe.utils.logging import pbar
 from vipe.utils.misc import unpack_optional
@@ -156,6 +157,7 @@ class SLAMSystem:
                 self.buffer.disps_sens[kf_idx, view_idx] = disp_sens
 
             if frame_data.pose is not None and phase == 1:
+                print(f"view_idx: {view_idx}, pose: {frame_data.pose}")
                 self.buffer.poses[kf_idx] = (SE3(self.buffer.rig[view_idx]) * frame_data.pose.inv()).data
 
         if phase == 1:

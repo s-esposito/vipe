@@ -20,6 +20,7 @@ import hydra
 
 from vipe import get_config_path, make_pipeline
 from vipe.streams.base import ProcessedVideoStream
+from vipe.streams.posed_raw_img_stream import PosedRawImgStream
 from vipe.streams.raw_img_stream import RawImgStream
 from vipe.streams.raw_mp4_stream import RawMp4Stream
 from vipe.utils.logging import configure_logging
@@ -29,6 +30,12 @@ from vipe.utils.viser import run_viser
 @click.command()
 @click.argument("video", type=click.Path(exists=True, path_type=Path))
 @click.option(
+    "--cameras", "-c",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to camera files directory (default: None)",
+    default=None
+)
+@click.option(
     "--output",
     "-o",
     type=click.Path(path_type=Path),
@@ -37,12 +44,20 @@ from vipe.utils.viser import run_viser
 )
 @click.option("--pipeline", "-p", default="default", help="Pipeline configuration to use (default: 'default')")
 @click.option("--visualize", "-v", is_flag=True, help="Enable visualization of intermediate results")
-def infer(video: Path, output: Path, pipeline: str, visualize: bool):
+def infer(video: Path, cameras: Path, output: Path, pipeline: str, visualize: bool):
     """Run inference on a video file."""
+
+    print(f"video path: {video}")
+    print(f"camera path: {cameras}")
+    print(f"output path: {output}")
+    print(f"pipeline: {pipeline}")
+    print(f"visualize: {visualize}")
 
     logger = configure_logging()
 
-    overrides = [f"pipeline={pipeline}", f"pipeline.output.path={output}", "pipeline.output.save_artifacts=true"]
+    overrides = [
+        f"pipeline={pipeline}", f"pipeline.output.path={output}", "pipeline.output.save_artifacts=true"
+    ]
     if visualize:
         overrides.append("pipeline.output.save_viz=true")
         overrides.append("pipeline.slam.visualize=true")
@@ -63,7 +78,10 @@ def infer(video: Path, output: Path, pipeline: str, visualize: bool):
         raw_stream = RawMp4Stream(video)
     # else check if it is a directory
     elif video.is_dir():
-        raw_stream = RawImgStream(video)
+        if cameras is not None and cameras.is_dir():
+            raw_stream = PosedRawImgStream(video, cameras)
+        else:
+            raw_stream = RawImgStream(video)
     else:
         raise ValueError(f"No supported video format found for {video}")
 

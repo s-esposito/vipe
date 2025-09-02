@@ -167,3 +167,7 @@ vipe_results/
 /try_*.py
 /external/
 JIAHUI.md
+
+# additional testing scenes
+assets/examples/dynamic
+assets/examples/curls
