@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 from pathlib import Path
 
 import cv2
@@ -48,11 +49,29 @@ class PosedRawImgStream(VideoStream):
         frames_paths = sorted([f for f in path.iterdir() if f.suffix.lower() in [".jpg", ".png"]])
         if len(frames_paths) == 0:
             raise ValueError(f"No image files found in directory {path}")
+        # print("frames_paths:", frames_paths)
+
+        # get files extension from first frame path
+        _frame_ext = frames_paths[0].suffix.lower()
+        # 
+        base_frames_path = frames_paths[0].parent
+
+        # list all files in cameras
+        camera_paths = sorted([f for f in cameras.iterdir() if f.suffix.lower() in [".json"]])
+        if len(camera_paths) == 0:
+            raise ValueError(f"No camera files found in directory {cameras}")
+        # print("camera_paths:", camera_paths)
+
+        # PROBLEM: some scenes have less camera files than rgb files
+        # use camera files names to load rgb files
 
         # Read all images
         self.frames_rgb = []
-        for fpath in frames_paths:
-            img = Image.open(fpath).convert("RGB")
+        # for fpath in frames_paths:
+        for fpath in camera_paths:
+            # fpath_ = fpath
+            fpath_ = base_frames_path / Path(str(fpath.stem) + _frame_ext)
+            img = Image.open(fpath_).convert("RGB")
             img = np.array(img)
             self.frames_rgb.append(img)
 
@@ -61,17 +80,52 @@ class PosedRawImgStream(VideoStream):
         _fps = 30.0  # Assume a default fps of 30.0
         _n_frames = len(self.frames_rgb)
 
-        # TODO: load cameras from cameras folder
-        # list all files in cameras
-        camera_files = sorted([f for f in cameras.iterdir() if f.suffix.lower() in [".json"]])
-        if len(camera_files) == 0:
-            raise ValueError(f"No camera files found in directory {cameras}")
-        # print("camera_files:", camera_files)
+        self.poses = []
+        self.intrinsics = []
 
-        # TODO: load poses from a file
-        # self.poses = np.load(path / "poses.npy")  # (N, 4, 4)
-        self.poses = np.eye(4)[None].repeat(_n_frames, axis=0)  # (N, 4, 4)'
-        self.poses = [self.poses[i] for i in range(_n_frames)]
+        if True:
+            for fpath in camera_paths:
+                # load json
+                with open(fpath, "r") as f:
+                    camera_data = json.load(f)
+                # process camera_data
+                # print(f"Loaded camera data from {fpath}: {camera_data}")
+                orientation = np.array(camera_data.get("orientation"))
+                position = np.array(camera_data.get("position"))
+                pose = np.zeros((4, 4))
+                pose[:3, :3] = orientation
+                pose[:3, 3] = position
+                focal_length = camera_data.get("focal_length")
+                principal_point = camera_data.get("principal_point")
+                image_size = camera_data.get("image_size")
+                intrinsics = np.zeros((3, 3))
+                intrinsics[0, 0] = focal_length
+                intrinsics[1, 1] = focal_length
+                intrinsics[0, 2] = principal_point[0]
+                intrinsics[1, 2] = principal_point[1]
+                # print("orientation", orientation)
+                # print("position", position)
+                # print("image_size", image_size)
+                # print("intrinsics", intrinsics)
+                
+                s_width, s_height = self._width / image_size[0], self._height / image_size[1]
+                # print("og width, height", self._width, self._height)
+                # print("K width, height", image_size[0], image_size[1])
+                # print("scales", s_width, s_height)
+                intrinsics[0, :] *= s_width
+                intrinsics[1, :] *= s_height
+                # exit(0)
+                
+                # print("intrinsics", intrinsics)
+                # exit(0)
+                self.poses.append(pose)
+                self.intrinsics.append(intrinsics)
+        else:
+            # Handle cases where camera data is not available
+            self.poses = [None] * len(self.frames_rgb)
+            self.intrinsics = [None] * len(self.frames_rgb)
+
+        assert len(self.poses) == len(self.frames_rgb), f"Number of poses {len(self.poses)} does not match number of frames {len(self.frames_rgb)}"
 
         self.start = seek_range.start
         self.end = seek_range.stop if seek_range.stop != -1 else _n_frames
@@ -119,21 +173,26 @@ class PosedRawImgStream(VideoStream):
         frame_rgb = frame_rgb.cuda()
 
         c2w = self.poses[self.current_frame_idx]
-        c2w = torch.as_tensor(c2w).float().cuda()
-        R = c2w[:3, :3]
-        t = c2w[:3, 3]
-        quat = so3_matrix_to_quat(R)
-        # print("t:", t)
-        # print("quat:", quat)
-        # exit(0)
+        if c2w is not None:
+            c2w = torch.as_tensor(c2w).float().cuda()
+            R = c2w[:3, :3]
+            t = c2w[:3, 3]
+            quat = so3_matrix_to_quat(R)
+            # print("t:", t)
+            # print("quat:", quat)
+            # exit(0)
 
-        # TODO: convert c2w (4, 4) to SE3 (translation, quaternion xyzw)
-        quaternion = quat # torch.as_tensor([0.0, 0.0, 0.0, 1.0])
-        translation = t # torch.as_tensor([0.0, 0.0, 0.0])
-        data = torch.cat([translation, quaternion], -1)
-        pose: SE3 = SE3(data)
+            # TODO: convert c2w (4, 4) to SE3 (translation, quaternion xyzw)
+            quaternion = quat # torch.as_tensor([0.0, 0.0, 0.0, 1.0])
+            translation = t # torch.as_tensor([0.0, 0.0, 0.0])
+            data = torch.cat([translation, quaternion], -1)
+            pose: SE3 = SE3(data)
+        else:
+            pose = None
 
-        intrinsics = None
+        intrinsics = self.intrinsics[self.current_frame_idx]
+        if intrinsics is not None:
+            intrinsics = torch.as_tensor(intrinsics).float().cuda()
 
         return VideoFrame(
             raw_frame_idx=self.current_frame_idx,

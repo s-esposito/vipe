@@ -107,10 +107,6 @@ class DefaultAnnotationPipeline(Pipeline):
 
         slam_pipeline = SLAMSystem(device=torch.device("cuda"), config=self.slam_cfg)
         slam_output = slam_pipeline.run(slam_streams, rig=slam_rig, camera_type=self.camera_type)
-        
-        # TODO: 
-        # print(slam_output)
-        # exit(0)
 
         if self.return_payload:
             annotate_output.payload = slam_output
@@ -130,14 +126,14 @@ class DefaultAnnotationPipeline(Pipeline):
                 with artifact_path.meta_info_path.open("wb") as f:
                     pickle.dump({"ba_residual": slam_output.ba_residual}, f)
 
-            if self.out_cfg.save_viz:
-                save_projection_video(
-                    artifact_path.meta_vis_path,
-                    output_stream,
-                    slam_output,
-                    self.out_cfg.viz_downsample,
-                    self.out_cfg.viz_attributes,
-                )
+            # if self.out_cfg.save_viz:
+            save_projection_video(
+                artifact_path.meta_vis_path,
+                output_stream,
+                slam_output,
+                self.out_cfg.viz_downsample,
+                self.out_cfg.viz_attributes,
+            )
 
             if self.out_cfg.save_slam_map and slam_output.slam_map is not None:
                 logger.info(f"Saving SLAM map to {artifact_path.slam_map_path}")

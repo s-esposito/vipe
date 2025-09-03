@@ -39,6 +39,7 @@ from .components.sparse_tracks import build_sparse_tracks
 from .interface import SLAMOutput
 from .networks.droid_net import DroidNet
 
+MY_CHANGES=True
 
 class StandardResizeStreamProcessor(StreamProcessor):
     def __init__(self) -> None:
@@ -157,8 +158,10 @@ class SLAMSystem:
                 self.buffer.disps_sens[kf_idx, view_idx] = disp_sens
 
             if frame_data.pose is not None and phase == 1:
-                print(f"view_idx: {view_idx}, pose: {frame_data.pose}")
+                # print(f"view_idx: {view_idx}, pose: {frame_data.pose.data}")
                 self.buffer.poses[kf_idx] = (SE3(self.buffer.rig[view_idx]) * frame_data.pose.inv()).data
+
+            # exit(0)
 
         if phase == 1:
             self.buffer.update_disps_sens(self.metric_depth, frame_idx=kf_idx)
@@ -240,6 +243,8 @@ class SLAMSystem:
             }
         )
 
+        print("optimize_intrinsics", self.config.optimize_intrinsics)
+
         self._build_components()
 
         if self.visualize:
@@ -254,13 +259,23 @@ class SLAMSystem:
         ):
             images, buffer_masks = self._precompute_features(frame_data_list)
 
-            self.sparse_tracks.track_image(frame_data_list)
+            if MY_CHANGES:
+                # TODO: do not track when poses are given
+                # self.sparse_tracks.track_image(frame_data_list)
 
-            if self.motion_filter.check(images, buffer_masks) or frame_idx == total_n_frames - 1:
+                # if self.motion_filter.check(images, buffer_masks) or frame_idx == total_n_frames - 1:
                 is_keyframe = True
                 self._add_keyframe(frame_idx, images, buffer_masks, frame_data_list, phase=1)
+                # else:
+                #     is_keyframe = False
             else:
-                is_keyframe = False
+                self.sparse_tracks.track_image(frame_data_list)
+
+                if self.motion_filter.check(images, buffer_masks) or frame_idx == total_n_frames - 1:
+                    is_keyframe = True
+                    self._add_keyframe(frame_idx, images, buffer_masks, frame_data_list, phase=1)
+                else:
+                    is_keyframe = False
 
             self.frontend.run()
 
